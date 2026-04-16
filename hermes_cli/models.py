@@ -1006,6 +1006,26 @@ def detect_provider_for_model(
     if any(name_lower == m.lower() for m in current_models):
         return None
 
+    # --- Step 0.5: vendor/model slash format ---
+    # Handle "provider/model-name" format (e.g. "deepseek/deepseek-reasoner").
+    # Split on the first "/" and check if the left part resolves to a known
+    # provider whose catalog contains the right part.  This covers both
+    # built-in providers (_PROVIDER_MODELS) and lets the caller fall through
+    # to credential resolution which also checks user-defined providers in
+    # config.yaml.
+    if "/" in name and not name.startswith("/"):
+        vendor_part, bare_model = name.split("/", 1)
+        vendor_lower = vendor_part.strip().lower()
+        bare_lower = bare_model.strip().lower()
+        if vendor_lower and bare_lower:
+            # Resolve vendor aliases (e.g. "deep-seek" -> "deepseek")
+            resolved_vendor = _PROVIDER_ALIASES.get(vendor_lower, vendor_lower)
+            vendor_models = _PROVIDER_MODELS.get(resolved_vendor, [])
+            if any(bare_lower == m.lower() for m in vendor_models):
+                # Found in built-in catalog — return the bare model name
+                # so the provider gets the name it expects (without vendor prefix)
+                return (resolved_vendor, bare_model.strip())
+
     # --- Step 1: check static provider catalogs for a direct match ---
     direct_match: Optional[str] = None
     for pid, models in _PROVIDER_MODELS.items():
